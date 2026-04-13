@@ -1,5 +1,6 @@
 # ══════════════════════════════════════════════════════════════════
-#  OpenClaw — Instance Makefile Template (Linux)
+#  OpenClaw — Instance Makefile Template (Linux host network by default;
+#  macOS/Windows: see PLATFORM NOTES for Ollama URL + port mapping).
 #  Copy this file, rename to "Makefile", and edit the CONFIGURATION section.
 # ══════════════════════════════════════════════════════════════════
 #
@@ -7,7 +8,7 @@
 #     • QUICK START GUIDE:
 # ──────────────────────────────────────────────────────────────────
 #   1. Copy this file:    cp template_makefile Makefile
-#   2. Edit CONFIGURATION section below (instance name, base path, model)
+#   2. Edit CONFIGURATION (instance name, base path, MODEL, OLLAMA_BASE_URL)
 #   3. make build         — Build the Docker image
 #   4. make setup         — Run interactive setup (one-time)
 #   5. make up            — Start the container
@@ -28,11 +29,25 @@
 #   make down && make clean && make all
 #
 # ──────────────────────────────────────────────────────────────────
-#     • PLATFORM NOTES:
+#     • PLATFORM NOTES (Docker networking ↔ Ollama):
 # ──────────────────────────────────────────────────────────────────
-#   This template is configured for LINUX.
-#   For macOS: Change --network host to -p 18789:18789 -p 18791:18791
-#              Change OLLAMA_BASE_URL to http://host.docker.internal:11434
+#   Ollama listens on the host at port 11434 by default. The OpenClaw
+#   container must reach that API — set OLLAMA_BASE_URL in CONFIGURATION
+#   to a URL that resolves *from inside the container*.
+#
+#   Linux + --network host (default `up` recipe below):
+#     OLLAMA_BASE_URL=http://127.0.0.1:11434  (same network namespace as host)
+#
+#   macOS / Windows (Docker Desktop) — use published ports, not host network:
+#     In `up`, replace --network host with:
+#       -p 18789:18789 -p 18791:18791
+#     Set:
+#     OLLAMA_BASE_URL=http://host.docker.internal:11434
+#
+#   Linux + bridge network (no host mode):
+#     Often OLLAMA_BASE_URL=http://172.17.0.1:11434 (docker0) or your host LAN IP.
+#
+#   Ensure the model is available:  ollama pull <name>   (same name as MODEL)
 #
 # ══════════════════════════════════════════════════════════════════
 
@@ -51,8 +66,16 @@ ARCHIVES_DIR_NAME  := archives
 RESOURCES_DIR_NAME := resources
 AREAS_DIR_NAME     := areas
 
-MODEL              ?= <your-model>                   # e.g. gemma4:31b, llama3:70b, gpt-4
-OLLAMA_BASE_URL    := http://localhost:11434         # Linux: localhost or 172.17.0.1
+# --- Ollama (local LLM API) ----------------------------------------
+# MODEL is passed to the gateway; use a tag you have pulled on the host.
+# Example:  ollama pull gemma3:12b   then   make up MODEL=gemma3:12b
+MODEL              ?= <your-model>                   # e.g. gemma3:12b, llama3.1:8b, mistral
+#
+# OLLAMA_BASE_URL: base URL for Ollama’s HTTP API (default port 11434).
+# Pick the line that matches your OS + the `docker run` flags in `up`:
+OLLAMA_BASE_URL    := http://127.0.0.1:11434         # Linux + --network host (default `up`)
+# OLLAMA_BASE_URL  := http://host.docker.internal:11434   # Docker Desktop (macOS/Windows); use -p 18789:18789 -p 18791:18791 in `up`
+# OLLAMA_BASE_URL  := http://172.17.0.1:11434             # Linux, bridged docker0 (if not using host network)
 
 # ══════════════════════════════════════════════════════════════════
 #  DERIVED VALUES — Do not edit below this line
@@ -89,7 +112,8 @@ build:
 		| docker build --no-cache -t $(IMAGE_NAME) -
 
 ## up: Create workspace dirs and start the OpenClaw container
-## Note: Uses --network host for Linux. For macOS, use -p 18789:18789 -p 18791:18791 instead. line 101 below. 
+## Default: --network host (Linux + OLLAMA_BASE_URL=http://127.0.0.1:11434).
+## macOS/Windows: comment --network host, use -p 18789:18789 -p 18791:18791, set OLLAMA_BASE_URL to host.docker.internal (see CONFIGURATION).
 up:
 	@echo "Starting OpenClaw instance: $(CONTAINER_NAME)..."
 	@mkdir -p $(CONFIG_DIR)
